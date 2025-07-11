@@ -1,0 +1,85 @@
+// Jenkinsfile for Docker Build, Push, and Deploy
+pipeline {
+    agent any // Or specify a Docker agent if you have one configured
+
+    environment {
+        // Replace with your Docker Hub username or ECR repository URI
+        DOCKER_HUB_USERNAME = 'your_docker_hub_username'
+        IMAGE_NAME = 'my-sample-app'
+        // For ECR: AWS_ACCOUNT_ID = '123456789012'
+        // For ECR: ECR_REPO_URI = "${AWS_ACCOUNT_ID}.dkr.ecr.us-west-1.amazonaws.com/${IMAGE_NAME}"
+        APP_SERVER_IP = '10.0.4.231' // Replace with your App Server Private IP
+        SSH_KEY_CREDENTIAL_ID = 'jenkins-ssh-key' // ID of the SSH key credential in Jenkins
+    }
+
+    stages {
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                script {
+                    // Build the Docker image
+                    docker.build("${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}")
+                }
+            }
+        }
+
+        stage('Docker Push') {
+            steps {
+                script {
+                    // Push the Docker image to Docker Hub
+                    // Replace 'dockerhub-credentials' with the ID of your Docker Hub credentials in Jenkins
+                    // (Username/Password type)
+                    docker.withRegistry("https://registry.hub.docker.com", 'dockerhub-credentials') {
+                        docker.image("${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}").push()
+                    }
+                    // For ECR:
+                    // docker.withRegistry("${env.ECR_REPO_URI}", 'aws-ecr-credentials') { // 'aws-ecr-credentials' is a credential ID for AWS access
+                    //     docker.image("${env.ECR_REPO_URI}:${env.BUILD_NUMBER}").push()
+                    // }
+                }
+            }
+        }
+
+        stage('Docker Cleanup (Local)') {
+            steps {
+                script {
+                    // Remove the local Docker image after push to save space
+                    sh "docker rmi ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
+                }
+            }
+        }
+
+        stage('Deploy to App Machine') {
+            steps {
+                // Use SSH Agent plugin for secure key usage
+                // Ensure 'jenkins-ssh-key' is a 'SSH Username with Private Key' credential in Jenkins
+                // with your id_rsa_terraform private key.
+                sshagent(credentials: [env.SSH_KEY_CREDENTIAL_ID]) {
+                    sh """
+                        # SSH into the App Server from Jenkins agent (assuming agent has direct access or via bastion)
+                        # For direct SSH from Jenkins agent (if it has network access to App Server)
+                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${env.APP_SERVER_IP} <<EOF
+                            # Login to Docker Hub on the app machine (if needed for private repos)
+                            # echo "your_docker_hub_password" | docker login --username ${env.DOCKER_HUB_USERNAME} --password-stdin
+
+                            # Stop and remove any old container
+                            docker stop ${env.IMAGE_NAME} || true
+                            docker rm ${env.IMAGE_NAME} || true
+
+                            # Pull the new image
+                            docker pull ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
+
+                            # Run the new container
+                            docker run -d --name ${env.IMAGE_NAME} -p 80:80 ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
+                        EOF
+                    """
+                }
+            }
+        }
+    }
+}
