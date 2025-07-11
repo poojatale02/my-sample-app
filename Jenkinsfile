@@ -52,12 +52,17 @@ pipeline {
         stage('Docker Push') {
             steps {
                 script {
-                    // Authenticates to Docker Hub using credentials stored in Jenkins.
-                    // The password is securely accessed via the 'credentials()' binding.
-                    sh "echo ${credentials(env.DOCKER_HUB_CREDENTIAL_ID).password} | /usr/bin/docker login --username ${env.DOCKER_HUB_USERNAME} --password-stdin"
-
-                    // Pushes the built Docker image to Docker Hub.
-                    sh "/usr/bin/docker push ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
+                    // Use withCredentials to securely access Docker Hub password.
+                    // The 'usernameVariable' and 'passwordVariable' define environment variables
+                    // that will be available ONLY within this 'withCredentials' block.
+                    withCredentials([usernamePassword(credentialsId: env.DOCKER_HUB_CREDENTIAL_ID, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        // Authenticates to Docker Hub using the credentials.
+                        // The '$' before DOCKER_PASS and DOCKER_USER ensures the shell interprets them as variables.
+                        sh "echo \$DOCKER_PASS | /usr/bin/docker login --username \$DOCKER_USER --password-stdin"
+                        
+                        // Pushes the built Docker image to Docker Hub.
+                        sh "/usr/bin/docker push ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
+                    }
 
                     // For ECR (uncomment and update if you decide to use ECR instead of Docker Hub):
                     // sh "aws ecr get-login-password --region ${env.AWS_REGION} | /usr/bin/docker login --username AWS --password-stdin ${env.ECR_REPO_URI}"
@@ -81,13 +86,19 @@ pipeline {
                 // Uses the SSH Agent plugin to securely provide the SSH private key
                 // for connecting to the App Server.
                 sshagent(credentials: [env.SSH_KEY_CREDENTIAL_ID]) {
+                    // Using << "EOF" to prevent Groovy interpolation within the heredoc.
+                    // This allows shell variables (like $DOCKER_USER_APP, $DOCKER_PASS_APP) to be used.
                     sh """
                         # SSH into the App Server from the Jenkins agent.
                         # -o StrictHostKeyChecking=no: Disables strict host key checking (useful for dynamic IPs).
                         # -o UserKnownHostsFile=/dev/null: Prevents adding host keys to known_hosts.
-                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/dev/null ubuntu@${env.APP_SERVER_IP} <<EOF
-                            # Login to Docker Hub on the App Server (necessary if your Docker Hub image is private).
-                            echo ${credentials(env.DOCKER_HUB_CREDENTIAL_ID).password} | /usr/bin/docker login --username ${env.DOCKER_HUB_USERNAME} --password-stdin
+                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${env.APP_SERVER_IP} << "EOF"
+                            // Use withCredentials inside the SSH session for Docker Hub login on the app machine.
+                            // This ensures the credentials are only exposed within this block.
+                            withCredentials([usernamePassword(credentialsId: "${env.DOCKER_HUB_CREDENTIAL_ID}", usernameVariable: 'DOCKER_USER_APP', passwordVariable: 'DOCKER_PASS_APP')]) {
+                                # Login to Docker Hub on the App Server (necessary if your Docker Hub image is private).
+                                sh "echo \$DOCKER_PASS_APP | /usr/bin/docker login --username \$DOCKER_USER_APP --password-stdin"
+                            }
 
                             # Stop and remove any old container of the same name.
                             # '|| true' prevents the script from failing if the container doesn't exist.
@@ -108,3 +119,4 @@ pipeline {
         }
     }
 }
+
