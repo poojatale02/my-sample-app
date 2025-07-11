@@ -14,7 +14,8 @@ pipeline {
 
         APP_SERVER_IP = '10.0.4.231' // <<< REPLACE WITH YOUR APP SERVER PRIVATE IP
         SSH_KEY_CREDENTIAL_ID = 'jenkins-ssh-key' // ID of the SSH key credential in Jenkins
-        DOCKER_HUB_CREDENTIAL_ID = 'dockerhub-credentials' // ID of the Docker Hub credential in Jenkins
+        // DOCKER_HUB_CREDENTIAL_ID is commented out as we're hardcoding it for debugging
+        // DOCKER_HUB_CREDENTIAL_ID = 'dockerhub-credentials'
     }
 
     // Prevent Jenkins from doing its own implicit checkout.
@@ -53,9 +54,8 @@ pipeline {
             steps {
                 script {
                     // Use withCredentials to securely access Docker Hub password.
-                    // The 'usernameVariable' and 'passwordVariable' define environment variables
-                    // that will be available ONLY within this 'withCredentials' block.
-                    withCredentials([usernamePassword(credentialsId: env.DOCKER_HUB_CREDENTIAL_ID, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    // Hardcoding credentialsId for debugging to rule out variable resolution issues.
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         // Authenticates to Docker Hub using the credentials.
                         // The '$' before DOCKER_PASS and DOCKER_USER ensures the shell interprets them as variables.
                         sh "echo \$DOCKER_PASS | /usr/bin/docker login --username \$DOCKER_USER --password-stdin"
@@ -94,8 +94,8 @@ pipeline {
                         # -o UserKnownHostsFile=/dev/null: Prevents adding host keys to known_hosts.
                         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${env.APP_SERVER_IP} << "EOF"
                             // Use withCredentials inside the SSH session for Docker Hub login on the app machine.
-                            // This ensures the credentials are only exposed within this block.
-                            withCredentials([usernamePassword(credentialsId: "${env.DOCKER_HUB_CREDENTIAL_ID}", usernameVariable: 'DOCKER_USER_APP', passwordVariable: 'DOCKER_PASS_APP')]) {
+                            // Hardcoding credentialsId for debugging to rule out variable resolution issues.
+                            withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER_APP', passwordVariable: 'DOCKER_PASS_APP')]) {
                                 # Login to Docker Hub on the App Server (necessary if your Docker Hub image is private).
                                 sh "echo \$DOCKER_PASS_APP | /usr/bin/docker login --username \$DOCKER_USER_APP --password-stdin"
                             }
