@@ -24,18 +24,17 @@ pipeline {
     }
 
     stages {
-        stage('Checkout Source Code') {
+        stage('Clean Workspace') { // Moved to be the first stage
+            steps {
+                cleanWs() // Cleans the workspace directory before starting the build.
+            }
+        }
+
+        stage('Checkout Source Code') { // Moved to be the second stage
             steps {
                 // This step performs the SCM checkout configured in the Jenkins job.
                 // It will pull the repository content into the workspace.
                 checkout scm
-            }
-        }
-
-        stage('Clean Workspace') {
-            steps {
-                // Cleans the workspace directory before starting the build.
-                cleanWs()
             }
         }
 
@@ -56,7 +55,7 @@ pipeline {
                     // Authenticates to Docker Hub using credentials stored in Jenkins.
                     // The password is securely accessed via the 'credentials()' binding.
                     sh "echo ${credentials(env.DOCKER_HUB_CREDENTIAL_ID).password} | /usr/bin/docker login --username ${env.DOCKER_HUB_USERNAME} --password-stdin"
-                    
+
                     // Pushes the built Docker image to Docker Hub.
                     sh "/usr/bin/docker push ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
 
@@ -86,7 +85,7 @@ pipeline {
                         # SSH into the App Server from the Jenkins agent.
                         # -o StrictHostKeyChecking=no: Disables strict host key checking (useful for dynamic IPs).
                         # -o UserKnownHostsFile=/dev/null: Prevents adding host keys to known_hosts.
-                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${env.APP_SERVER_IP} <<EOF
+                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/dev/null ubuntu@${env.APP_SERVER_IP} <<EOF
                             # Login to Docker Hub on the App Server (necessary if your Docker Hub image is private).
                             echo ${credentials(env.DOCKER_HUB_CREDENTIAL_ID).password} | /usr/bin/docker login --username ${env.DOCKER_HUB_USERNAME} --password-stdin
 
@@ -109,4 +108,3 @@ pipeline {
         }
     }
 }
-
