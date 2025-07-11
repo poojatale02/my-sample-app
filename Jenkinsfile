@@ -1,6 +1,3 @@
-**The full updated `Jenkinsfile` will look like this:**
-
-```groovy
 // Jenkinsfile for Docker Build, Push, and Deploy
 pipeline {
     agent any // Or specify a Docker agent if you have one configured
@@ -20,7 +17,8 @@ pipeline {
         DOCKER_HUB_CREDENTIAL_ID = 'dockerhub-credentials' // ID of the Docker Hub credential in Jenkins
     }
 
-    // Prevent Jenkins from doing its own implicit checkout
+    // Prevent Jenkins from doing its own implicit checkout.
+    // We will perform an explicit checkout in the 'Checkout Source Code' stage.
     options {
         skipDefaultCheckout()
     }
@@ -28,13 +26,15 @@ pipeline {
     stages {
         stage('Checkout Source Code') {
             steps {
-                // This step performs the SCM checkout configured in the job
-              checkout scm
+                // This step performs the SCM checkout configured in the Jenkins job.
+                // It will pull the repository content into the workspace.
+                checkout scm
             }
-      }
+        }
 
         stage('Clean Workspace') {
             steps {
+                // Cleans the workspace directory before starting the build.
                 cleanWs()
             }
         }
@@ -42,6 +42,9 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
+                    // Builds the Docker image.
+                    // Using '/usr/bin/docker' explicitly to ensure the command is found inside the Jenkins container.
+                    // The '.' at the end indicates the build context is the current directory (the workspace).
                     sh "/usr/bin/docker build -t ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER} ."
                 }
             }
@@ -50,8 +53,16 @@ pipeline {
         stage('Docker Push') {
             steps {
                 script {
+                    // Authenticates to Docker Hub using credentials stored in Jenkins.
+                    // The password is securely accessed via the 'credentials()' binding.
                     sh "echo ${credentials(env.DOCKER_HUB_CREDENTIAL_ID).password} | /usr/bin/docker login --username ${env.DOCKER_HUB_USERNAME} --password-stdin"
+                    
+                    // Pushes the built Docker image to Docker Hub.
                     sh "/usr/bin/docker push ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
+
+                    // For ECR (uncomment and update if you decide to use ECR instead of Docker Hub):
+                    // sh "aws ecr get-login-password --region ${env.AWS_REGION} | /usr/bin/docker login --username AWS --password-stdin ${env.ECR_REPO_URI}"
+                    // sh "/usr/bin/docker push ${env.ECR_REPO_URI}:${env.BUILD_NUMBER}"
                 }
             }
         }
@@ -59,6 +70,8 @@ pipeline {
         stage('Docker Cleanup (Local)') {
             steps {
                 script {
+                    // Removes the Docker image from the local Jenkins agent's Docker daemon
+                    // after it has been successfully pushed to the registry.
                     sh "/usr/bin/docker rmi ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
                 }
             }
@@ -66,13 +79,28 @@ pipeline {
 
         stage('Deploy to App Machine') {
             steps {
+                // Uses the SSH Agent plugin to securely provide the SSH private key
+                // for connecting to the App Server.
                 sshagent(credentials: [env.SSH_KEY_CREDENTIAL_ID]) {
                     sh """
+                        # SSH into the App Server from the Jenkins agent.
+                        # -o StrictHostKeyChecking=no: Disables strict host key checking (useful for dynamic IPs).
+                        # -o UserKnownHostsFile=/dev/null: Prevents adding host keys to known_hosts.
                         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${env.APP_SERVER_IP} <<EOF
+                            # Login to Docker Hub on the App Server (necessary if your Docker Hub image is private).
                             echo ${credentials(env.DOCKER_HUB_CREDENTIAL_ID).password} | /usr/bin/docker login --username ${env.DOCKER_HUB_USERNAME} --password-stdin
+
+                            # Stop and remove any old container of the same name.
+                            # '|| true' prevents the script from failing if the container doesn't exist.
                             /usr/bin/docker stop ${env.IMAGE_NAME} || true
                             /usr/bin/docker rm ${env.IMAGE_NAME} || true
+
+                            # Pull the new image from Docker Hub to the App Server.
                             /usr/bin/docker pull ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
+
+                            # Run the new container in detached mode (-d).
+                            # --name: Assigns a specific name to the container.
+                            # -p 80:80: Maps host port 80 to container port 80 (Nginx default).
                             /usr/bin/docker run -d --name ${env.IMAGE_NAME} -p 80:80 ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
                         EOF
                     """
