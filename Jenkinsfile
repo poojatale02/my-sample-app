@@ -90,16 +90,16 @@ pipeline {
                         passwordVariable: 'DOCKER_PASS_APP'
                     )]) {
                         sh """
-                            ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${env.APP_SERVER_IP} <<EOF
-                                echo \$DOCKER_PASS_APP | docker login --username \$DOCKER_USER_APP --password-stdin
-        
-                                docker stop ${env.IMAGE_NAME} || true
-                                docker rm ${env.IMAGE_NAME} || true
-        
-                                docker pull ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
-        
-                                docker run -d --name ${env.IMAGE_NAME} -p 80:80 ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
-                            EOF
+                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@10.0.4.231 <<EOF
+                            echo \$DOCKER_PASS_APP | docker login --username \$DOCKER_USER_APP --password-stdin
+                        
+                            docker stop my-sample-app || true
+                            docker rm my-sample-app || true
+                        
+                            docker pull poojatale02/my-sample-app:${env.BUILD_NUMBER}
+                        
+                            docker run -d --name my-sample-app -p 80:80 poojatale02/my-sample-app:${env.BUILD_NUMBER}
+                        EOF
                         """
                     }
                 }
