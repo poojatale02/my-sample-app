@@ -4,7 +4,7 @@ pipeline {
 
     environment {
         // Replace with your Docker Hub username
-        DOCKER_HUB_USERNAME = 'your_docker_hub_username' // <<< REMEMBER TO UPDATE THIS
+        DOCKER_HUB_USERNAME = 'poojatale02' // <<< REMEMBER TO UPDATE THIS
         IMAGE_NAME = 'my-sample-app'
 
         // For ECR (uncomment and update if you decide to use ECR instead of Docker Hub)
