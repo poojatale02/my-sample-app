@@ -80,30 +80,31 @@ pipeline {
                 }
             }
         }
-
-     stage('Deploy to App Machine') {
-         steps {
-            sshagent(credentials: [env.SSH_KEY_CREDENTIAL_ID]) {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-credentials',
-                    usernameVariable: 'DOCKER_USER_APP',
-                    passwordVariable: 'DOCKER_PASS_APP'
-                )]) {
-                    sh """
-                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${env.APP_SERVER_IP} <<EOF
-                            echo \$DOCKER_PASS_APP | docker login --username \$DOCKER_USER_APP --password-stdin
     
-                            docker stop ${env.IMAGE_NAME} || true
-                            docker rm ${env.IMAGE_NAME} || true
-    
-                            docker pull ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
-    
-                            docker run -d --name ${env.IMAGE_NAME} -p 80:80 ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
-                        EOF
-                    """
+         stage('Deploy to App Machine') {
+             steps {
+                sshagent(credentials: [env.SSH_KEY_CREDENTIAL_ID]) {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USER_APP',
+                        passwordVariable: 'DOCKER_PASS_APP'
+                    )]) {
+                        sh """
+                            ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${env.APP_SERVER_IP} <<EOF
+                                echo \$DOCKER_PASS_APP | docker login --username \$DOCKER_USER_APP --password-stdin
+        
+                                docker stop ${env.IMAGE_NAME} || true
+                                docker rm ${env.IMAGE_NAME} || true
+        
+                                docker pull ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
+        
+                                docker run -d --name ${env.IMAGE_NAME} -p 80:80 ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
+                            EOF
+                        """
+                    }
                 }
             }
         }
     }
-}
-
+ }
+    
