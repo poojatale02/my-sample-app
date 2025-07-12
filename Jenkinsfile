@@ -58,7 +58,7 @@ pipeline {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         // Authenticates to Docker Hub using the credentials.
                         // The '$' before DOCKER_PASS and DOCKER_USER ensures the shell interprets them as variables.
-                        sh "echo \$DOCKER_PASS | /usr/bin/docker login --username \$DOCKER_USER --password-stdin"
+                        sh "echo \$DOCKER_PASS | /usr/bin/docker login --username poojatale02 --password-stdin"
                         
                         // Pushes the built Docker image to Docker Hub.
                         sh "/usr/bin/docker push ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
