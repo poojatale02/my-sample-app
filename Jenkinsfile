@@ -81,42 +81,26 @@ pipeline {
             }
         }
 
-        stage('Deploy to App Machine') {
-            steps {
-                // Uses the SSH Agent plugin to securely provide the SSH private key
-                // for connecting to the App Server.
-                sshagent(credentials: [env.SSH_KEY_CREDENTIAL_ID]) {
-                    // Using << "EOF" to prevent Groovy interpolation within the heredoc.
-                    // This allows shell variables (like $DOCKER_USER_APP, $DOCKER_PASS_APP) to be used.
+           stage('Deploy to App Machine') {
+        steps {
+            sshagent(credentials: ['jenkins-app-deploy-key-new']) {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER_APP', passwordVariable: 'DOCKER_PASS_APP')]) {
                     sh """
-                        # SSH into the App Server from the Jenkins agent.
-                        # -o StrictHostKeyChecking=no: Disables strict host key checking (useful for dynamic IPs).
-                        # -o UserKnownHostsFile=/dev/null: Prevents adding host keys to known_hosts.
-                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${env.APP_SERVER_IP} << "EOF"
-                            // Use withCredentials inside the SSH session for Docker Hub login on the app machine.
-                            // Hardcoding credentialsId for debugging to rule out variable resolution issues.
-                            withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER_APP', passwordVariable: 'DOCKER_PASS_APP')]) {
-                                # Login to Docker Hub on the App Server (necessary if your Docker Hub image is private).
-                                sh "echo \$DOCKER_PASS_APP | /usr/bin/docker login --username \$DOCKER_USER_APP --password-stdin"
-                            }
-
-                            # Stop and remove any old container of the same name.
-                            # '|| true' prevents the script from failing if the container doesn't exist.
-                            /usr/bin/docker stop ${env.IMAGE_NAME} || true
-                            /usr/bin/docker rm ${env.IMAGE_NAME} || true
-
-                            # Pull the new image from Docker Hub to the App Server.
-                            /usr/bin/docker pull ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
-
-                            # Run the new container in detached mode (-d).
-                            # --name: Assigns a specific name to the container.
-                            # -p 80:80: Maps host port 80 to container port 80 (Nginx default).
-                            /usr/bin/docker run -d --name ${env.IMAGE_NAME} -p 80:80 ${env.DOCKER_HUB_USERNAME}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
+                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@10.0.4.231 <<EOF
+                            echo \$DOCKER_PASS_APP | docker login --username \$DOCKER_USER_APP --password-stdin
+    
+                            docker stop my-sample-app || true
+                            docker rm my-sample-app || true
+    
+                            docker pull poojatale02/my-sample-app:${env.BUILD_NUMBER}
+    
+                            docker run -d --name my-sample-app -p 80:80 poojatale02/my-sample-app:${env.BUILD_NUMBER}
                         EOF
                     """
                 }
             }
         }
     }
+
 }
 
